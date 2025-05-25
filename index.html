@@ -179,7 +179,7 @@
       const imgName = imgEl.src.split('/').pop().split('?')[0];
       formData.append('imageName', imgName);
       formData.append('audio', audioBlob, `${formId}.webm`);
-      await fetch('https://primary-production-9647.up.railway.app/webhook-test/d7ae1b8a-ff6c-4165-bab1-93fce133608a', {
+      await fetch('https://primary-production-9647.up.railway.app/webhook/d7ae1b8a-ff6c-4165-bab1-93fce133608a', {
         method:'POST',
         body:formData
       });
