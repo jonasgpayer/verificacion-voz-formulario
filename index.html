@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verificación de Voz</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; }
+    h1 { text-align: center; }
+    #controls button { margin: 0.5rem; padding: 0.5rem 1rem; font-size: 1rem; }
+    #record-btn.recording { background: red; color: white; }
+    #waveform { width: 100%; height: 100px; background: #f0f0f0; }
+    #timer { font-size: 1.2rem; margin-top: 0.5rem; }
+    #controls { text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Verificación de Voz</h1>
+  <p>Para verificar su voz inicie la grabación y lea el texto de la imagen de abajo. Evite ruido de fondo y decir palabras que no estén en la imagen.</p>
+  <img id="prompt-image" src="" alt="Texto para leer" style="max-width:100%; margin-bottom:1rem;" />
+  <canvas id="waveform"></canvas>
+  <div id="timer">00:00</div>
+  <div id="controls">
+    <button id="record-btn">🎤 Grabar</button>
+    <button id="play-btn" disabled>▶️ Reproducir</button>
+    <button id="reset-btn" disabled>🗑️ Borrar</button>
+    <button id="send-btn" disabled>Enviar</button>
+  </div>
+
+  <script>
+    // Obtener parámetros de la URL
+    const params = new URLSearchParams(window.location.search);
+    const formId = params.get('id');
+    const imgEl = document.getElementById('prompt-image');
+    const ts = Date.now();
+    // Construir URL de la imagen
+    imgEl.src = `https://raw.githubusercontent.com/<tu-usuario>/verificacion-voz-formulario/main/images/${formId}.png?ts=${ts}`;
+
+    // Elementos UI
+    const recordBtn = document.getElementById('record-btn');
+    const playBtn = document.getElementById('play-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const sendBtn = document.getElementById('send-btn');
+    const timerEl = document.getElementById('timer');
+    const canvas = document.getElementById('waveform');
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+
+    let mediaRecorder, audioChunks = [], audioBlob, audioUrl, audioBuffer;
+    let audioCtx, analyser, sourceNode, dataArray, animationId;
+    let startTime;
+
+    // Función para actualizar temporizador
+    function updateTimer() {
+      const diff = Date.now() - startTime;
+      const secs = Math.floor(diff / 1000).toString().padStart(2, '0');
+      const mins = Math.floor(diff / 60000).toString().padStart(2, '0');
+      timerEl.textContent = `${mins}:${secs}`;
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        requestAnimationFrame(updateTimer);
+      }
+    }
+
+    // Función para visualizar audio
+    function drawWave() {
+      analyser.getByteTimeDomainData(dataArray);
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#333';
+      ctx.beginPath();
+      const sliceWidth = canvas.width / dataArray.length;
+      let x = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.lineTo(canvas.width, canvas.height/2);
+      ctx.stroke();
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        animationId = requestAnimationFrame(drawWave);
+      }
+    }
+
+    // Iniciar/Detener grabación
+    recordBtn.onclick = async () => {
+      if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+
+        // Preparar visualización
+        audioCtx = new AudioContext();
+        analyser = audioCtx.createAnalyser();
+        sourceNode = audioCtx.createMediaStreamSource(stream);
+        sourceNode.connect(analyser);
+        analyser.fftSize = 2048;
+        dataArray = new Uint8Array(analyser.fftSize);
+
+        audioChunks = [];
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.start();
+        startTime = Date.now();
+        updateTimer();
+        drawWave();
+
+        recordBtn.textContent = '⏹️ Detener';
+        recordBtn.classList.add('recording');
+      } else {
+        mediaRecorder.stop();
+        cancelAnimationFrame(animationId);
+        sourceNode.disconnect();
+        recordBtn.textContent = '🎤 Grabar';
+        recordBtn.classList.remove('recording');
+
+        audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        audioUrl = URL.createObjectURL(audioBlob);
+
+        playBtn.disabled = false;
+        resetBtn.disabled = false;
+        sendBtn.disabled = false;
+      }
+    };
+
+    // Reproducir grabación
+    playBtn.onclick = () => {
+      new Audio(audioUrl).play();
+    };
+
+    // Borrar grabación
+    resetBtn.onclick = () => {
+      audioChunks = [];
+      audioBlob = null;
+      audioUrl = null;
+      playBtn.disabled = true;
+      resetBtn.disabled = true;
+      sendBtn.disabled = true;
+      timerEl.textContent = '00:00';
+    };
+
+    // Enviar al webhook de n8n
+    sendBtn.onclick = async () => {
+      const formData = new FormData();
+      formData.append('id', formId);
+      formData.append('audio', audioBlob, `${formId}.webm`);
+
+      await fetch('https://TU_N8N_URL/webhook/flujo2', {
+        method: 'POST',
+        body: formData
+      });
+
+      alert('Audio enviado correctamente.');
+    };
+  </script>
+</body>
+</html>
