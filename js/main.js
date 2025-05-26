@@ -74,11 +74,11 @@
             const audio = new Audio(audioUrl);
             audio.play();
             isPlaying = true;
-            recordBtn.textContent = '⏹️';
+            recordBtn.querySelector('.material-icons').textContent = 'stop';
             recordBtn.classList.add('recording');
             audio.onended = () => {
               isPlaying = false;
-              recordBtn.textContent = '▶️';
+              recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
               recordBtn.classList.remove('recording');
             };
             return;
@@ -104,7 +104,7 @@
             audioUrl = URL.createObjectURL(audioBlob);
             if (audioBlob.size > 0) {
               resetBtn.disabled = sendBtn.disabled = false;
-              recordBtn.textContent = '▶️';
+              recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
               recordBtn.classList.remove('recording');
             } else {
               showAlert('La grabación está vacía. Intenta nuevamente.', 5000);
@@ -124,7 +124,7 @@
           updateTimer();
           drawWave();
 
-          recordBtn.textContent = '⏹️';
+          recordBtn.querySelector('.material-icons').textContent = 'stop';
           recordBtn.classList.add('recording');
         } else {
           // Detener grabación
@@ -146,7 +146,7 @@
       audioUrl    = null;
       resetBtn.disabled = sendBtn.disabled = true;
       timerEl.textContent = '00:00';
-      recordBtn.textContent = '🎤';
+      recordBtn.querySelector('.material-icons').textContent = 'mic';
       recordBtn.classList.remove('recording');
       isPlaying = false;
     };
