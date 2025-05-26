@@ -33,7 +33,8 @@
     let audioCtx, analyser, sourceNode, dataArray, startTime, animId;
     let isPlaying = false;
     let audioData = [];
-    const maxDataPoints = 100; // Número máximo de puntos de datos a mostrar
+    const maxDataPoints = 50; // Reducido para que las barras sean más anchas
+    let recordingInterval;
 
     // Función de alerta
     function showAlert(message, duration = 5000) {
@@ -88,9 +89,13 @@
         
         ctx.fillRect(x, y, barWidth - 1, height);
       });
+    }
 
-      if (mediaRecorder && mediaRecorder.state==='recording')
-        animId = requestAnimationFrame(drawWave);
+    function startVisualization() {
+      drawWave();
+      if (mediaRecorder && mediaRecorder.state==='recording') {
+        animId = requestAnimationFrame(startVisualization);
+      }
     }
 
     // Botón Grabar / Detener / Reproducir
@@ -104,6 +109,7 @@
             isPlaying = true;
             recordBtn.querySelector('.material-icons').textContent = 'stop';
             recordBtn.classList.add('recording');
+            
             audio.onended = () => {
               isPlaying = false;
               recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
@@ -138,6 +144,9 @@
           mediaRecorder.onstart = () => {
             console.log('Grabación iniciada');
             audioData = [];
+            startTime = Date.now();
+            updateTimer();
+            startVisualization();
           };
           
           mediaRecorder.onstop = () => {
@@ -174,15 +183,10 @@
           dataArray = new Uint8Array(analyser.frequencyBinCount);
 
           mediaRecorder.start(100); // Obtener datos cada 100ms
-          startTime = Date.now();
-          updateTimer();
-          drawWave();
-
           recordBtn.querySelector('.material-icons').textContent = 'stop';
           recordBtn.classList.add('recording');
         } else {
           // Detener grabación
-          mediaRecorder.requestData();
           mediaRecorder.stop();
           cancelAnimationFrame(animId);
           sourceNode.disconnect();
