@@ -49,11 +49,9 @@
 
   <script>
   (function(){
-    // 1) Parametrización e imagen
     const params = new URLSearchParams(window.location.search);
     let formId = params.get('id');
     if (!formId) {
-      // fallback para clean URLs vía 404.html
       const segs = window.location.pathname.split('/');
       formId = segs.pop() || segs.pop();
     }
@@ -61,7 +59,6 @@
     const ts = Date.now();
     imgEl.src = `https://jonasgpayer.github.io/verificacion-voz-formulario/images/${formId}.png?ts=${ts}`;
 
-    // 2) UI y Canvas
     const recordBtn = document.getElementById('record-btn');
     const playBtn   = document.getElementById('play-btn');
     const resetBtn  = document.getElementById('reset-btn');
@@ -75,7 +72,6 @@
     let mediaRecorder, audioChunks, audioBlob, audioUrl;
     let audioCtx, analyser, sourceNode, dataArray, startTime, animId;
 
-    // Función de alerta
     function showAlert(message, duration = 5000) {
       const c = document.getElementById('alert-container');
       c.textContent = message;
@@ -86,7 +82,6 @@
       }, duration);
     }
 
-    // Temporizador y waveform
     function updateTimer(){
       const diff = Date.now() - startTime;
       const s = String(Math.floor(diff/1000)).padStart(2,'0');
@@ -95,6 +90,7 @@
       if (mediaRecorder && mediaRecorder.state==='recording')
         requestAnimationFrame(updateTimer);
     }
+
     function drawWave(){
       analyser.getByteTimeDomainData(dataArray);
       ctx.fillStyle = '#f0f0f0';
@@ -116,7 +112,6 @@
         animId = requestAnimationFrame(drawWave);
     }
 
-    // Botón Grabar / Detener
     recordBtn.onclick = async () => {
       try {
         if (!mediaRecorder || mediaRecorder.state==='inactive') {
@@ -161,31 +156,32 @@
       }
     };
 
-    // Reproducir
     playBtn.onclick = () => new Audio(audioUrl).play();
 
-    // Borrar
     resetBtn.onclick = () => {
       audioChunks=[]; audioBlob=null; audioUrl=null;
       playBtn.disabled = resetBtn.disabled = sendBtn.disabled = true;
       timerEl.textContent = '00:00';
     };
 
-    // Enviar
     sendBtn.onclick = async () => {
       const formData = new FormData();
       formData.append('id', formId);
-      // extraer nombre de imagen del src:
       const imgName = imgEl.src.split('/').pop().split('?')[0];
       formData.append('imageName', imgName);
       formData.append('audio', audioBlob, `${formId}.webm`);
+
+      // DEBUG: imprime en consola lo que se envía
+      for (let [key, value] of formData.entries()) {
+        console.log('FormData →', key, value);
+      }
+
       await fetch('https://primary-production-9647.up.railway.app/webhook/d7ae1b8a-ff6c-4165-bab1-93fce133608a', {
         method:'POST',
         body:formData
       });
       showAlert('Audio enviado correctamente', 4000);
     };
-
   })();
   </script>
 </body>
