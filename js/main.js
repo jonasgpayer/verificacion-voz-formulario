@@ -1,4 +1,19 @@
+// v1.0.0
 (function(){
+    // Estado global
+    const STATE = {
+        IDLE: 'idle',
+        RECORDING: 'recording',
+        RECORDED: 'recorded',
+        PLAYING: 'playing'
+    };
+
+    let currentState = STATE.IDLE;
+    let mediaRecorder, audioChunks = [], audioBlob, audioUrl;
+    let audioCtx, analyser, sourceNode, dataArray, startTime, animId;
+    let audioData = [];
+    const maxDataPoints = 50;
+
     // 1) Parametrización e imagen
     const params = new URLSearchParams(window.location.search);
     let formId = params.get('id');
@@ -29,11 +44,7 @@
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    let mediaRecorder, audioChunks = [], audioBlob, audioUrl;
-    let audioCtx, analyser, sourceNode, dataArray, startTime, animId;
     let isPlaying = false;
-    let audioData = [];
-    const maxDataPoints = 50; // Reducido para que las barras sean más anchas
     let recordingInterval;
 
     // Función de alerta
@@ -99,154 +110,203 @@
       }
     }
 
+    // Función para actualizar el estado de los botones
+    function updateButtonStates() {
+        switch(currentState) {
+            case STATE.IDLE:
+                recordBtn.querySelector('.material-icons').textContent = 'mic';
+                recordBtn.classList.remove('recording');
+                resetBtn.disabled = true;
+                sendBtn.disabled = true;
+                break;
+            case STATE.RECORDING:
+                recordBtn.querySelector('.material-icons').textContent = 'stop';
+                recordBtn.classList.add('recording');
+                resetBtn.disabled = true;
+                sendBtn.disabled = true;
+                break;
+            case STATE.RECORDED:
+                recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
+                recordBtn.classList.remove('recording');
+                resetBtn.disabled = false;
+                sendBtn.disabled = false;
+                break;
+            case STATE.PLAYING:
+                recordBtn.querySelector('.material-icons').textContent = 'stop';
+                recordBtn.classList.add('recording');
+                resetBtn.disabled = false;
+                sendBtn.disabled = false;
+                break;
+        }
+    }
+
+    // Función para limpiar recursos
+    function cleanupResources() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        if (sourceNode) {
+            sourceNode.disconnect();
+        }
+        if (audioCtx) {
+            audioCtx.close();
+        }
+        if (animId) {
+            cancelAnimationFrame(animId);
+        }
+        if (audioUrl) {
+            URL.revokeObjectURL(audioUrl);
+        }
+    }
+
+    // Función para limpiar el estado
+    function resetState() {
+        cleanupResources();
+        audioChunks = [];
+        audioBlob = null;
+        audioUrl = null;
+        audioData = [];
+        currentState = STATE.IDLE;
+        updateButtonStates();
+        timerEl.textContent = '00:00';
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
     // Botón Grabar / Detener / Reproducir
     recordBtn.onclick = async () => {
-      try {
-        if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-          if (audioUrl && !isPlaying) {
-            // Reproducir
-            const audio = new Audio(audioUrl);
-            audio.play();
-            isPlaying = true;
-            recordBtn.querySelector('.material-icons').textContent = 'stop';
-            recordBtn.classList.add('recording');
-            
-            // Iniciar el contador durante la reproducción
-            startTime = Date.now();
-            updateTimer();
-            
-            audio.onended = () => {
-              isPlaying = false;
-              recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
-              recordBtn.classList.remove('recording');
-              timerEl.textContent = '00:00';
-            };
+        try {
+            switch(currentState) {
+                case STATE.IDLE:
+                    // Iniciar grabación
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        } 
+                    });
+                    
+                    mediaRecorder = new MediaRecorder(stream, { 
+                        mimeType: 'audio/webm; codecs=opus',
+                        audioBitsPerSecond: 128000
+                    });
 
-            audio.onerror = (e) => {
-              console.error('Error al reproducir:', e);
-              showAlert('Error al reproducir el audio', 5000);
-              isPlaying = false;
-              recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
-              recordBtn.classList.remove('recording');
-              timerEl.textContent = '00:00';
-            };
-            return;
-          }
+                    audioChunks = [];
+                    audioData = [];
 
-          // Grabar
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            } 
-          });
-          
-          mediaRecorder = new MediaRecorder(stream, { 
-            mimeType: 'audio/webm; codecs=opus',
-            audioBitsPerSecond: 128000
-          });
+                    mediaRecorder.ondataavailable = e => {
+                        if (e.data && e.data.size > 0) {
+                            audioChunks.push(e.data);
+                        }
+                    };
 
-          audioChunks = [];
-          audioData = [];
+                    mediaRecorder.onstart = () => {
+                        currentState = STATE.RECORDING;
+                        updateButtonStates();
+                        startTime = Date.now();
+                        updateTimer();
+                        startVisualization();
+                    };
+                    
+                    mediaRecorder.onstop = () => {
+                        audioBlob = new Blob(audioChunks, { type:'audio/webm' });
+                        
+                        if (audioBlob.size > 1000) {
+                            audioUrl = URL.createObjectURL(audioBlob);
+                            currentState = STATE.RECORDED;
+                            updateButtonStates();
+                        } else {
+                            showAlert('La grabación está vacía. Intenta nuevamente.', 5000);
+                            resetState();
+                        }
+                    };
 
-          mediaRecorder.ondataavailable = e => {
-            if (e.data && e.data.size > 0) {
-              audioChunks.push(e.data);
+                    audioCtx = new AudioContext();
+                    analyser = audioCtx.createAnalyser();
+                    sourceNode = audioCtx.createMediaStreamSource(stream);
+                    sourceNode.connect(analyser);
+                    analyser.fftSize = 2048;
+                    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                    mediaRecorder.start(100);
+                    break;
+
+                case STATE.RECORDING:
+                    // Detener grabación
+                    mediaRecorder.stop();
+                    cancelAnimationFrame(animId);
+                    sourceNode.disconnect();
+                    break;
+
+                case STATE.RECORDED:
+                    // Reproducir grabación
+                    const audio = new Audio(audioUrl);
+                    currentState = STATE.PLAYING;
+                    updateButtonStates();
+                    
+                    audio.play();
+                    startTime = Date.now();
+                    updateTimer();
+                    startVisualization();
+                    
+                    audio.onended = () => {
+                        currentState = STATE.RECORDED;
+                        updateButtonStates();
+                        timerEl.textContent = '00:00';
+                    };
+
+                    audio.onerror = (e) => {
+                        console.error('Error al reproducir:', e);
+                        showAlert('Error al reproducir el audio', 5000);
+                        currentState = STATE.RECORDED;
+                        updateButtonStates();
+                        timerEl.textContent = '00:00';
+                    };
+                    break;
+
+                case STATE.PLAYING:
+                    // Detener reproducción
+                    currentState = STATE.RECORDED;
+                    updateButtonStates();
+                    timerEl.textContent = '00:00';
+                    break;
             }
-          };
-
-          mediaRecorder.onstart = () => {
-            console.log('Grabación iniciada');
-            audioData = [];
-            startTime = Date.now();
-            updateTimer();
-            startVisualization();
-          };
-          
-          mediaRecorder.onstop = () => {
-            // esperar a que los datos estén listos
-            audioBlob = new Blob(audioChunks, { type:'audio/webm' });
-            console.log('Blob creado:', audioBlob, 'size:', audioBlob.size);
-            
-            if (audioBlob.size > 1000) { // Verificar que el blob tenga un tamaño mínimo
-              audioUrl = URL.createObjectURL(audioBlob);
-              resetBtn.disabled = sendBtn.disabled = false;
-              recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
-              recordBtn.classList.remove('recording');
-            } else {
-              showAlert('La grabación está vacía. Intenta nuevamente.', 5000);
-              // Limpiar el estado
-              audioChunks = [];
-              audioBlob = null;
-              audioUrl = null;
-              recordBtn.querySelector('.material-icons').textContent = 'mic';
-              recordBtn.classList.remove('recording');
-            }
-          };
-          
-          mediaRecorder.onerror = e => {
-            console.error('Error en la grabación:', e);
-            showAlert('Error al grabar. Intenta nuevamente.', 5000);
-          };
-
-          audioCtx = new AudioContext();
-          analyser = audioCtx.createAnalyser();
-          sourceNode = audioCtx.createMediaStreamSource(stream);
-          sourceNode.connect(analyser);
-          analyser.fftSize = 2048;
-          dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-          mediaRecorder.start(100); // Obtener datos cada 100ms
-          recordBtn.querySelector('.material-icons').textContent = 'stop';
-          recordBtn.classList.add('recording');
-        } else {
-          // Detener grabación
-          mediaRecorder.stop();
-          cancelAnimationFrame(animId);
-          sourceNode.disconnect();
+        } catch(err) {
+            console.error('Error:', err);
+            showAlert('Error al acceder al micrófono', 6000);
+            resetState();
         }
-      } catch(err) {
-        console.error('Error al acceder al micrófono:', err);
-        showAlert('Activa el acceso al micrófono para dictar', 6000);
-      }
     };
 
     // Borrar
     resetBtn.onclick = () => {
-      audioChunks = [];
-      audioBlob   = null;
-      audioUrl    = null;
-      audioData   = [];
-      resetBtn.disabled = sendBtn.disabled = true;
-      timerEl.textContent = '00:00';
-      recordBtn.querySelector('.material-icons').textContent = 'mic';
-      recordBtn.classList.remove('recording');
-      isPlaying = false;
-      
-      // Limpiar el canvas
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+        resetState();
     };
 
     // Enviar
     sendBtn.onclick = async () => {
-      const formData = new FormData();
-      formData.append('id', formId);
-      const imgName = imgEl.src.split('/').pop().split('?')[0];
-      formData.append('imageName', imgName);
-      formData.append('audio', audioBlob, `${formId}.webm`);
+        if (currentState !== STATE.RECORDED) {
+            showAlert('Debes grabar un audio antes de enviar', 4000);
+            return;
+        }
 
-      // DEBUG: comprueba en consola el contenido
-      for (let [key, value] of formData.entries()) {
-        console.log('FormData →', key, value);
-      }
+        const formData = new FormData();
+        formData.append('id', formId);
+        const imgName = imgEl.src.split('/').pop().split('?')[0];
+        formData.append('imageName', imgName);
+        formData.append('audio', audioBlob, `${formId}.webm`);
 
-      await fetch(
-        'https://primary-production-9647.up.railway.app/webhook-test/d7ae1b8a-ff6c-4165-bab1-93fce133608a',        
-        { method:'POST', body:formData }
-      );
-      showAlert('Audio enviado correctamente', 4000);
+        try {
+            await fetch(
+                'https://primary-production-9647.up.railway.app/webhook-test/d7ae1b8a-ff6c-4165-bab1-93fce133608a',        
+                { method:'POST', body:formData }
+            );
+            showAlert('Audio enviado correctamente', 4000);
+        } catch (error) {
+            console.error('Error al enviar:', error);
+            showAlert('Error al enviar el audio', 4000);
+        }
     };
 
 })(); 
