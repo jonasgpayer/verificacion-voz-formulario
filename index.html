@@ -12,12 +12,15 @@
   <h1>Verificación de Voz</h1>
   <p>Para verificar su voz inicie la grabación y lea el texto de la imagen de abajo. Evite ruido de fondo y decir palabras que no estén en la imagen.</p>
   <img id="prompt-image" src="" alt="Texto para leer" style="max-width:100%; margin-bottom:1rem;" />
-  <canvas id="waveform"></canvas>
-  <div id="timer">00:00</div>
-  <div id="controls">
-    <button id="record-btn">🎤 Grabar</button>
-    <button id="play-btn" disabled>▶️ Reproducir</button>
-    <button id="reset-btn" disabled>🗑️ Borrar</button>
+  
+  <div class="recording-container">
+    <button id="record-btn" class="round-btn">🎤</button>
+    <div id="timer">00:00</div>
+    <canvas id="waveform"></canvas>
+    <button id="reset-btn" class="round-btn" disabled>🗑️</button>
+  </div>
+
+  <div class="send-container">
     <button id="send-btn" disabled>Enviar</button>
   </div>
 

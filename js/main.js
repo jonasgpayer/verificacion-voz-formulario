@@ -12,7 +12,6 @@
 
     // 2) UI y Canvas
     const recordBtn = document.getElementById('record-btn');
-    const playBtn   = document.getElementById('play-btn');
     const resetBtn  = document.getElementById('reset-btn');
     const sendBtn   = document.getElementById('send-btn');
     const timerEl   = document.getElementById('timer');
@@ -23,6 +22,7 @@
 
     let mediaRecorder, audioChunks = [], audioBlob, audioUrl;
     let audioCtx, analyser, sourceNode, dataArray, startTime, animId;
+    let isPlaying = false;
 
     // Función de alerta
     function showAlert(message, duration = 5000) {
@@ -46,7 +46,7 @@
     }
     function drawWave(){
       analyser.getByteTimeDomainData(dataArray);
-      ctx.fillStyle = '#f0f0f0';
+      ctx.fillStyle = '#fff';
       ctx.fillRect(0,0,canvas.width,canvas.height);
       ctx.lineWidth = 2;
       ctx.strokeStyle = '#333';
@@ -65,10 +65,26 @@
         animId = requestAnimationFrame(drawWave);
     }
 
-    // Botón Grabar / Detener
+    // Botón Grabar / Detener / Reproducir
     recordBtn.onclick = async () => {
       try {
         if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+          if (audioUrl && !isPlaying) {
+            // Reproducir
+            const audio = new Audio(audioUrl);
+            audio.play();
+            isPlaying = true;
+            recordBtn.textContent = '⏹️';
+            recordBtn.classList.add('recording');
+            audio.onended = () => {
+              isPlaying = false;
+              recordBtn.textContent = '▶️';
+              recordBtn.classList.remove('recording');
+            };
+            return;
+          }
+
+          // Grabar
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm; codecs=opus' });
 
@@ -87,7 +103,9 @@
             console.log('Blob creado:', audioBlob, 'size:', audioBlob.size);
             audioUrl = URL.createObjectURL(audioBlob);
             if (audioBlob.size > 0) {
-              playBtn.disabled = resetBtn.disabled = sendBtn.disabled = false;
+              resetBtn.disabled = sendBtn.disabled = false;
+              recordBtn.textContent = '▶️';
+              recordBtn.classList.remove('recording');
             } else {
               showAlert('La grabación está vacía. Intenta nuevamente.', 5000);
             }
@@ -106,16 +124,14 @@
           updateTimer();
           drawWave();
 
-          recordBtn.textContent='⏹️ Detener';
+          recordBtn.textContent = '⏹️';
           recordBtn.classList.add('recording');
         } else {
+          // Detener grabación
           mediaRecorder.requestData();
           mediaRecorder.stop();
           cancelAnimationFrame(animId);
           sourceNode.disconnect();
-
-          recordBtn.textContent='🎤 Grabar';
-          recordBtn.classList.remove('recording');
         }
       } catch(err) {
         console.error(err);
@@ -123,16 +139,16 @@
       }
     };
 
-    // Reproducir
-    playBtn.onclick = () => new Audio(audioUrl).play();
-
     // Borrar
     resetBtn.onclick = () => {
       audioChunks = [];
       audioBlob   = null;
       audioUrl    = null;
-      playBtn.disabled  = resetBtn.disabled = sendBtn.disabled = true;
+      resetBtn.disabled = sendBtn.disabled = true;
       timerEl.textContent = '00:00';
+      recordBtn.textContent = '🎤';
+      recordBtn.classList.remove('recording');
+      isPlaying = false;
     };
 
     // Enviar
