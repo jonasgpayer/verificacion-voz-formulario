@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Verificación de Voz</title>
   <link rel="stylesheet" href="css/styles.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
   <div id="alert-container"></div>
@@ -14,14 +15,21 @@
   <img id="prompt-image" src="" alt="Texto para leer" style="max-width:100%; margin-bottom:1rem;" />
   
   <div class="recording-container">
-    <button id="record-btn" class="round-btn">🎤</button>
+    <button id="record-btn" class="round-btn">
+      <span class="material-icons">mic</span>
+    </button>
     <div id="timer">00:00</div>
     <canvas id="waveform"></canvas>
-    <button id="reset-btn" class="round-btn" disabled>🗑️</button>
+    <button id="reset-btn" class="round-btn" disabled>
+      <span class="material-icons">delete</span>
+    </button>
   </div>
 
   <div class="send-container">
-    <button id="send-btn" disabled>Enviar</button>
+    <button id="send-btn" disabled>
+      <span class="material-icons">send</span>
+      Enviar
+    </button>
   </div>
 
   <script src="js/main.js"></script>
