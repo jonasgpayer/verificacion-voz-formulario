@@ -78,13 +78,14 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       const barWidth = canvas.width / maxDataPoints;
-      const barHeight = canvas.height * 0.8;
+      const barHeight = canvas.height * 0.95; // Aumentado de 0.8 a 0.95 para usar más espacio vertical
       
       ctx.fillStyle = '#4CAF50';
       
       audioData.forEach((value, index) => {
         const x = index * barWidth;
-        const height = (value / 255) * barHeight;
+        // Aumentar la sensibilidad multiplicando el valor por 1.5
+        const height = (value / 255) * barHeight * 1.5;
         const y = (canvas.height - height) / 2;
         
         ctx.fillRect(x, y, barWidth - 1, height);
