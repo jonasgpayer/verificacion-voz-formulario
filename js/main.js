@@ -308,7 +308,7 @@
             if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
                 showAlert('Acceso al micrófono denegado. Habilita los permisos en tu navegador.', 6000);
             } else {
-                showAlert('Error al iniciar grabación. Intenta nuevamente.', 6000);
+                showAlert('Activa el acceso al micrófono para grabar', 6000);
             }
             resetRecording(); // Asegurarse de volver a un estado consistente
         }
