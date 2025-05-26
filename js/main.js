@@ -111,10 +111,24 @@
             recordBtn.querySelector('.material-icons').textContent = 'stop';
             recordBtn.classList.add('recording');
             
+            // Iniciar el contador durante la reproducción
+            startTime = Date.now();
+            updateTimer();
+            
             audio.onended = () => {
               isPlaying = false;
               recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
               recordBtn.classList.remove('recording');
+              timerEl.textContent = '00:00';
+            };
+
+            audio.onerror = (e) => {
+              console.error('Error al reproducir:', e);
+              showAlert('Error al reproducir el audio', 5000);
+              isPlaying = false;
+              recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
+              recordBtn.classList.remove('recording');
+              timerEl.textContent = '00:00';
             };
             return;
           }
