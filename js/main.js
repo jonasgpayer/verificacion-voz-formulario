@@ -17,12 +17,23 @@
     const timerEl   = document.getElementById('timer');
     const canvas    = document.getElementById('waveform');
     const ctx       = canvas.getContext('2d');
-    canvas.width    = canvas.clientWidth;
-    canvas.height   = canvas.clientHeight;
+    
+    // Ajustar tamaño del canvas
+    function resizeCanvas() {
+        const container = canvas.parentElement;
+        const containerWidth = container.clientWidth - 180; // Restar espacio para botones y timer
+        canvas.width = containerWidth;
+        canvas.height = canvas.clientHeight;
+    }
+    
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
 
     let mediaRecorder, audioChunks = [], audioBlob, audioUrl;
     let audioCtx, analyser, sourceNode, dataArray, startTime, animId;
     let isPlaying = false;
+    let audioData = [];
+    const maxDataPoints = 100; // Número máximo de puntos de datos a mostrar
 
     // Función de alerta
     function showAlert(message, duration = 5000) {
@@ -44,23 +55,40 @@
       if (mediaRecorder && mediaRecorder.state==='recording')
         requestAnimationFrame(updateTimer);
     }
+
     function drawWave(){
-      analyser.getByteTimeDomainData(dataArray);
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#333';
-      ctx.beginPath();
-      let x = 0;
-      const slice = canvas.width / dataArray.length;
-      for (let i=0; i<dataArray.length; i++) {
-        const v = (dataArray[i]/128.0)*(canvas.height/2);
-        if (i===0) ctx.moveTo(x,v);
-        else      ctx.lineTo(x,v);
-        x += slice;
+      analyser.getByteFrequencyData(dataArray);
+      
+      // Calcular la amplitud promedio
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
       }
-      ctx.lineTo(canvas.width,canvas.height/2);
-      ctx.stroke();
+      const average = sum / dataArray.length;
+      
+      // Agregar nuevo punto de datos
+      audioData.push(average);
+      if (audioData.length > maxDataPoints) {
+        audioData.shift();
+      }
+
+      // Dibujar el visualizador
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const barWidth = canvas.width / maxDataPoints;
+      const barHeight = canvas.height * 0.8;
+      
+      ctx.fillStyle = '#4CAF50';
+      
+      audioData.forEach((value, index) => {
+        const x = index * barWidth;
+        const height = (value / 255) * barHeight;
+        const y = (canvas.height - height) / 2;
+        
+        ctx.fillRect(x, y, barWidth - 1, height);
+      });
+
       if (mediaRecorder && mediaRecorder.state==='recording')
         animId = requestAnimationFrame(drawWave);
     }
@@ -85,10 +113,21 @@
           }
 
           // Grabar
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm; codecs=opus' });
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            } 
+          });
+          
+          mediaRecorder = new MediaRecorder(stream, { 
+            mimeType: 'audio/webm; codecs=opus',
+            audioBitsPerSecond: 128000
+          });
 
           audioChunks = [];
+          audioData = [];
 
           mediaRecorder.ondataavailable = e => {
             if (e.data && e.data.size > 0) {
@@ -96,30 +135,45 @@
             }
           };
 
-          mediaRecorder.onstart = () => console.log('Grabación iniciada');
-          mediaRecorder.onstop  = () => {
+          mediaRecorder.onstart = () => {
+            console.log('Grabación iniciada');
+            audioData = [];
+          };
+          
+          mediaRecorder.onstop = () => {
             // esperar a que los datos estén listos
             audioBlob = new Blob(audioChunks, { type:'audio/webm' });
             console.log('Blob creado:', audioBlob, 'size:', audioBlob.size);
-            audioUrl = URL.createObjectURL(audioBlob);
-            if (audioBlob.size > 0) {
+            
+            if (audioBlob.size > 1000) { // Verificar que el blob tenga un tamaño mínimo
+              audioUrl = URL.createObjectURL(audioBlob);
               resetBtn.disabled = sendBtn.disabled = false;
               recordBtn.querySelector('.material-icons').textContent = 'play_arrow';
               recordBtn.classList.remove('recording');
             } else {
               showAlert('La grabación está vacía. Intenta nuevamente.', 5000);
+              // Limpiar el estado
+              audioChunks = [];
+              audioBlob = null;
+              audioUrl = null;
+              recordBtn.querySelector('.material-icons').textContent = 'mic';
+              recordBtn.classList.remove('recording');
             }
           };
-          mediaRecorder.onerror = e => console.error(e);
+          
+          mediaRecorder.onerror = e => {
+            console.error('Error en la grabación:', e);
+            showAlert('Error al grabar. Intenta nuevamente.', 5000);
+          };
 
-          audioCtx    = new AudioContext();
-          analyser    = audioCtx.createAnalyser();
-          sourceNode  = audioCtx.createMediaStreamSource(stream);
+          audioCtx = new AudioContext();
+          analyser = audioCtx.createAnalyser();
+          sourceNode = audioCtx.createMediaStreamSource(stream);
           sourceNode.connect(analyser);
           analyser.fftSize = 2048;
-          dataArray  = new Uint8Array(analyser.fftSize);
+          dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-          mediaRecorder.start();
+          mediaRecorder.start(100); // Obtener datos cada 100ms
           startTime = Date.now();
           updateTimer();
           drawWave();
@@ -134,7 +188,7 @@
           sourceNode.disconnect();
         }
       } catch(err) {
-        console.error(err);
+        console.error('Error al acceder al micrófono:', err);
         showAlert('Activa el acceso al micrófono para dictar', 6000);
       }
     };
@@ -144,11 +198,16 @@
       audioChunks = [];
       audioBlob   = null;
       audioUrl    = null;
+      audioData   = [];
       resetBtn.disabled = sendBtn.disabled = true;
       timerEl.textContent = '00:00';
       recordBtn.querySelector('.material-icons').textContent = 'mic';
       recordBtn.classList.remove('recording');
       isPlaying = false;
+      
+      // Limpiar el canvas
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     };
 
     // Enviar
