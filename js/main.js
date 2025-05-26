@@ -220,7 +220,7 @@
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true
+                    autoGainControl: false
                 }
             });
             
